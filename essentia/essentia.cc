@@ -115,7 +115,7 @@ void DestroyAnalyzer(void *ptr) {
     essentia::shutdown();
 }
 
-void AnalyzeFile(void *ptr, const char *path) {
+ResultArr AnalyzeFile(void *ptr, const char *path) {
     Analyzer* anl = (Analyzer*)ptr;
 
     Algorithm* audio = factory.create("MonoLoader", "filename", path, "sampleRate", sampleRate);
@@ -131,6 +131,11 @@ void AnalyzeFile(void *ptr, const char *path) {
     */
 
     audio->compute();
+
+    Real* arr = 0;
+    arr = (Real*)malloc((audioBuffer.size()/hopSize+2) * sizeof(Real)); 
+    uint32_t cnt=0;
+
     while (true) {
         // compute a frame
         fc->compute();
@@ -147,7 +152,18 @@ void AnalyzeFile(void *ptr, const char *path) {
         anl->energy->compute();
 
         //pool.add("lowlevel.mfcc", anl->energyValue);
-        cout << anl->energyValue << "\n";
+        //cout << anl->energyValue << " ";
+
+        arr[cnt] = anl->energyValue;
+        cnt++;
     }
-    cout << "\n";
+    //cout << "\n";
+    //cout << "ORIG: " << (audioBuffer.size()/hopSize+2) << "\n";
+    //cout << "CNT: " << cnt << "\n";
+
+    ResultArr result={0};
+    result.Cnt = cnt;
+    result.Res = arr;
+
+    return result;
 }
