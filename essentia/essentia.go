@@ -51,9 +51,8 @@ type Analyzer struct {
 	*cpointer
 }
 
-func NewAnalyzer() Analyzer {
-
-	ptr := C.NewAnalyzer()
+func NewAnalyzer(frameSize int) Analyzer {
+	ptr := C.NewAnalyzer(C.int(frameSize))
 
 	anl := Analyzer{newCPointer(ptr, destroyAnalyzer)}
 	return anl
@@ -81,4 +80,9 @@ func (anl Analyzer) AnalyzeFile(path string) ([]float32, error) {
 	copy(result, slice)
 
 	return result, nil
+}
+
+func (anl Analyzer) FrameEnergy(frame []float32) float32 {
+	energy := C.FrameEnergy(anl.p, (*C.float)(&frame[0]))
+	return float32(energy)
 }

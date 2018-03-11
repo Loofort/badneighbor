@@ -80,7 +80,6 @@ AlgorithmFactory& initFactory() {
 }
 AlgorithmFactory& factory = initFactory();
 int sampleRate = 44100;
-int frameSize = 2048;
 int hopSize = 1024;
 
 struct Analyzer {
@@ -91,10 +90,12 @@ struct Analyzer {
     Algorithm* energy;
 
     Real energyValue;
+    int frameSize;
 };
 
-void* NewAnalyzer() {
+void* NewAnalyzer(int frameSize) {
     Analyzer* anl = new Analyzer();
+    anl->frameSize = frameSize;
 
     // register the algorithms in the factory(ies)
     anl->audioBuffer.resize(frameSize);
@@ -122,13 +123,11 @@ ResultArr AnalyzeFile(void *ptr, const char *path) {
     vector<Real> audioBuffer;
     audio->output("audio").set(audioBuffer);
 
-    Algorithm* fc = factory.create("FrameCutter", "frameSize", frameSize, "hopSize", hopSize);
+    Algorithm* fc = factory.create("FrameCutter", "frameSize", anl->frameSize, "hopSize", hopSize);
     fc->input("signal").set(audioBuffer);
     fc->output("frame").set(anl->audioBuffer);
 
-    /*
-    Algorithm* w = factory.create("Windowing", "type", "blackmanharris62");
-    */
+    //Algorithm* w = factory.create("Windowing", "type", "blackmanharris62");
 
     audio->compute();
 
@@ -151,19 +150,26 @@ ResultArr AnalyzeFile(void *ptr, const char *path) {
         anl->dcremoval->compute();
         anl->energy->compute();
 
-        //pool.add("lowlevel.mfcc", anl->energyValue);
-        //cout << anl->energyValue << " ";
-
         arr[cnt] = anl->energyValue;
         cnt++;
     }
-    //cout << "\n";
-    //cout << "ORIG: " << (audioBuffer.size()/hopSize+2) << "\n";
-    //cout << "CNT: " << cnt << "\n";
 
     ResultArr result={0};
     result.Cnt = cnt;
     result.Res = arr;
 
     return result;
+}
+
+Real FrameEnergy(void *ptr, const float *gobuf) {
+    Analyzer* anl = (Analyzer*)ptr;
+
+    for (int i=0; i< anl->frameSize; i++){
+        anl->audioBuffer[i] = (Real) gobuf[i];
+    }
+
+    anl->dcremoval->compute();
+    anl->energy->compute();
+
+    return anl->energyValue;
 }

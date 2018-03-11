@@ -54,7 +54,7 @@ func Listen(dev *portaudio.DeviceInfo, frameSize int, stereo bool) (chan [][]flo
 	sp := portaudio.StreamParameters{
 		Input:           sdp,
 		SampleRate:      dev.DefaultSampleRate,
-		FramesPerBuffer: portaudio.FramesPerBufferUnspecified, // 0 - special value for better performance
+		FramesPerBuffer: frameSize, // portaudio.FramesPerBufferUnspecified (0) - special value for better performance
 	}
 
 	buf := [][]float32{}
@@ -75,7 +75,7 @@ func Listen(dev *portaudio.DeviceInfo, frameSize int, stereo bool) (chan [][]flo
 
 	// read stream synchronously to obtain defined frame length
 	// note: we never know if sound is throttled (we need to use callback to deal with it)
-	samplesc := make(chan [][]float32)
+	samplesc := make(chan [][]float32, 1)
 	go readLoop(stream, buf, samplesc)
 
 	return samplesc, nil
@@ -105,7 +105,8 @@ func readLoop(stream *portaudio.Stream, buf [][]float32, samplesc chan [][]float
 		case samplesc <- bufcopy:
 		default:
 			// todo: write metric or log
-			log.Printf("throttling of input samples is detected\n")
+			//log.Printf("throttling of input samples is detected\n")
+			fmt.Printf("[T]")
 		}
 	}
 }

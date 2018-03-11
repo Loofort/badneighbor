@@ -1,57 +1,109 @@
 package main
 
 import (
-	"io"
-	"os"
+	"fmt"
+	"log"
 
-	mp3 "github.com/hajimehoshi/go-mp3"
+	"github.com/Loofort/badneighbor/ears"
+	"github.com/Loofort/badneighbor/essentia"
+	"github.com/gordonklaus/portaudio"
+)
+
+const (
+	listen = iota
+	record
 )
 
 func main() {
-
-	ch := make(chan []byte)
-	audioc := openAudioFile("testdata/one-two.mp3")
-	go reader2chan(d, ch)
-
-	statsc := getStatsAgregation(audioc)
-
-	// each frame represent 10 ms of audio
-	// so iteration should be faster
-	for frame := range statsc {
-		analyze()
-
-		// save energies to prometheus
-		save
-	}
-
+	log.Print(run())
 }
 
-func openAudioFile(file string) (mp3.Decoder, error) {
-	f, err := os.Open(file)
+func run() error {
+	err := portaudio.Initialize()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer f.Close()
+	defer portaudio.Terminate()
 
-	d, err := mp3.NewDecoder(f)
+	dev, err := portaudio.DefaultInputDevice()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	defer d.Close()
 
-	return d, nil
+	
+	frameSize := 4096
+	framesc, err := ears.Listen(dev, frameSize, false)
+	if err != nil {
+		return err
+	}
+
+	anl := essentia.NewAnalyzer(frameSize)
+	//state := listen
+	res := []float32{}
+	cnt := 500
+	for frames := range framesc {
+		cnt--
+		if cnt == 0 {
+			break
+		}
+
+		energy := anl.FrameEnergy(frames[0])
+		res = append(res, energy)
+
+	}
+
+	fmt.Printf("res %v\n", res)
+	return nil
 }
 
-func reader2chan(r io.Reader, ch chan []byte) {
-	for {
-		b := make([]byte, 1<<16)
-		n, err := r.Read(b)
-		if err != nil {
-			close(ch)
-			return
-		}
-		if n > 0 {
-			ch <- b[0:n]
-		}
-	}
+type Frame = []float32
+type Event = int
+
+const(
+	none = iota
+	increase
+	active
+	deccrease
+)
+type SM {
+   state int
+   threshold float32
+   buf Frame
+   writer *lame.LameWriter
+
+   state func(Frame) Event
+   transition map[int]int
 }
+
+func (sm *SM) input(frame Frame) {
+	energy := anl.FrameEnergy(frames[0])
+	event := sm.state(frame, energy)
+	sm.state := sm.transition[sm.state][event]
+}
+
+func (sm *SM) stateNone(frame Frame, energy float32) Event {
+	if energy < sm.threshold {
+		return none
+	}
+
+	sm.frames = append(sm.frames, frame)
+	return increase
+}
+
+func (sm *SM) stateIncrease(frame Frame, energy float32) Event {
+	if energy < sm.threshold {
+		sm.frames = []Frame{}
+		return none
+	}
+
+	sm.frames = append(sm.frames, frame)
+	if len(sm.frames) < 3 {
+		return increase
+	}
+
+	for _, frame := range sm.frames {
+		int, err := sm.writer.Write(p []byte) 
+	}
+	return active
+}
+
