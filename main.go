@@ -1,11 +1,14 @@
 package main
 
 import (
-	"fmt"
+	"io"
 	"log"
+	"os"
+	"time"
 
 	"github.com/Loofort/badneighbor/ears"
 	"github.com/Loofort/badneighbor/essentia"
+	"github.com/Loofort/badneighbor/lame"
 	"github.com/gordonklaus/portaudio"
 )
 
@@ -30,7 +33,6 @@ func run() error {
 		return err
 	}
 
-	
 	frameSize := 4096
 	framesc, err := ears.Listen(dev, frameSize, false)
 	if err != nil {
@@ -38,62 +40,76 @@ func run() error {
 	}
 
 	anl := essentia.NewAnalyzer(frameSize)
-	//state := listen
-	res := []float32{}
-	cnt := 500
-	for frames := range framesc {
-		cnt--
-		if cnt == 0 {
-			break
-		}
 
-		energy := anl.FrameEnergy(frames[0])
-		res = append(res, energy)
-
+	rec := &SM{
+		process:    stateNone,
+		threshold:  0.1,
+		samplerate: int(dev.DefaultSampleRate),
 	}
 
-	fmt.Printf("res %v\n", res)
+	for frames := range framesc {
+		energy := anl.FrameEnergy(frames[0])
+		rec.input(frames[0], energy)
+	}
+
 	return nil
 }
 
+/*************************** State Machine *********************************/
 type Frame = []float32
-type Event = int
+type State int
 
-const(
+const (
 	none = iota
 	increase
 	active
-	deccrease
+	decrease
 )
-type SM {
-   state int
-   threshold float32
-   buf Frame
-   writer *lame.LameWriter
 
-   state func(Frame) Event
-   transition map[int]int
+type SM struct {
+	process    func(sm *SM, frame Frame, energy float32) State
+	threshold  float32
+	samplerate int
+	frames     []Frame
+	writer     *LameWriter
 }
 
-func (sm *SM) input(frame Frame) {
-	energy := anl.FrameEnergy(frames[0])
-	event := sm.state(frame, energy)
-	sm.state := sm.transition[sm.state][event]
+func (sm *SM) input(frame Frame, energy float32) {
+	state := sm.process(sm, frame, energy)
+
+	switch state {
+	case none:
+		sm.process = stateNone
+	case increase:
+		sm.process = stateIncrease
+	case active:
+		sm.process = stateActive
+	case decrease:
+		sm.process = stateDecrease
+
+	}
 }
 
-func (sm *SM) stateNone(frame Frame, energy float32) Event {
+func (sm *SM) free() State {
+	if sm.writer != nil {
+		sm.writer.Close()
+		sm.writer = nil
+	}
+	return none
+}
+
+func stateNone(sm *SM, frame Frame, energy float32) State {
 	if energy < sm.threshold {
 		return none
 	}
 
-	sm.frames = append(sm.frames, frame)
+	sm.frames = []Frame{frame}
 	return increase
 }
 
-func (sm *SM) stateIncrease(frame Frame, energy float32) Event {
+func stateIncrease(sm *SM, frame Frame, energy float32) State {
 	if energy < sm.threshold {
-		sm.frames = []Frame{}
-		return none
+		return sm.free()
 	}
 
 	sm.frames = append(sm.frames, frame)
@@ -101,9 +117,98 @@ func (sm *SM) stateIncrease(frame Frame, energy float32) Event {
 		return increase
 	}
 
-	for _, frame := range sm.frames {
-		int, err := sm.writer.Write(p []byte) 
+	// start mp3 file
+	var err error
+	sm.writer, err = NewLameWriter(sm.samplerate)
+	if err != nil {
+		// log error
+		log.Printf("can't write mp3 file: %v", err)
+		return sm.free()
 	}
+
+	for _, frame := range sm.frames {
+		_, err := sm.writer.Write(frame)
+		if err != nil {
+			log.Printf("can't write mp3 file: %v", err)
+			return sm.free()
+		}
+	}
+
 	return active
 }
 
+func stateActive(sm *SM, frame Frame, energy float32) State {
+	if energy < sm.threshold {
+		sm.frames = []Frame{frame}
+		return decrease
+	}
+
+	_, err := sm.writer.Write(frame)
+	if err != nil {
+		log.Printf("can't write mp3 file: %v", err)
+		return sm.free()
+	}
+
+	return active
+}
+
+func stateDecrease(sm *SM, frame Frame, energy float32) State {
+	if energy >= sm.threshold {
+		for _, frame := range sm.frames {
+			_, err := sm.writer.Write(frame)
+			if err != nil {
+				log.Printf("can't write mp3 file: %v", err)
+				return sm.free()
+			}
+		}
+		return active
+	}
+
+	sm.frames = append(sm.frames, frame)
+	if len(sm.frames) > 20 {
+		return sm.free()
+	}
+
+	return decrease
+}
+
+type LameWriter struct {
+	out io.Writer
+	enc *lame.Encoder
+}
+
+func NewLameWriter(samplerate int) (*LameWriter, error) {
+	enc, err := lame.NewEncoder(samplerate) // create new or use static ?
+	if err != nil {
+		return nil, err
+	}
+
+	timestr := time.Now().Format(time.RFC3339)
+	os.Mkdir("output", os.ModePerm)
+	file, err := os.Create("output/" + timestr + ".mp3")
+	if err != nil {
+		return nil, err
+	}
+
+	return &LameWriter{file, enc}, nil
+}
+
+func (lw *LameWriter) Write(frame Frame) (int, error) {
+	b, err := lw.enc.Encode(frame)
+	if err != nil {
+		return 0, err
+	}
+
+	_, err = lw.out.Write(b)
+	if err != nil {
+		return 0, err
+	}
+
+	return len(b), nil
+}
+
+func (lw *LameWriter) Close() error {
+	b := lw.enc.Flush()
+	_, err := lw.out.Write(b)
+	return err
+}
