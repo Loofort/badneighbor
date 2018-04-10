@@ -11,10 +11,23 @@ typedef struct ResultArr {
     uint32_t Cnt;
 } ResultArr;
 
+typedef struct Resul {
+    const char *Err;
+    void *Signal;
+    uint32_t SignalCnt;
+    float Energy;
+    float Loudness;
+    float ReplayGain;
+    float InstantPower;
+    float RMS;
+    int Intensity;
+} Result;
+
+
 void* NewAnalyzer(int frameSize);
 void DestroyAnalyzer(void *ptr);
 ResultArr AnalyzeFile(void *ptr, const char *path);
-float FrameEnergy(void *ptr, const float *gobuf);
+Result AnalyzeFrame(void *ptr, const float *gobuf);
 
 #ifdef __cplusplus
 }

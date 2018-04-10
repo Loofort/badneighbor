@@ -82,7 +82,25 @@ func (anl Analyzer) AnalyzeFile(path string) ([]float32, error) {
 	return result, nil
 }
 
-func (anl Analyzer) FrameEnergy(frame []float32) float32 {
-	energy := C.FrameEnergy(anl.p, (*C.float)(&frame[0]))
-	return float32(energy)
+type Stats struct {
+	Energy       float32
+	Loudness     float32
+	ReplayGain   float32
+	InstantPower float32
+	RMS          float32
+	Intensity    int
+}
+
+func (anl Analyzer) AnalyzeFrame(frame []float32) Stats {
+	res := C.AnalyzeFrame(anl.p, (*C.float)(&frame[0]))
+	stats := Stats{
+		Energy:       float32(res.Energy),
+		Loudness:     float32(res.Loudness),
+		ReplayGain:   float32(res.ReplayGain),
+		InstantPower: float32(res.InstantPower),
+		RMS:          float32(res.RMS),
+		Intensity:    int(res.Intensity),
+	}
+
+	return stats
 }

@@ -87,9 +87,17 @@ struct Analyzer {
     vector<Real> audioBuffer_dc;
 
     Algorithm* dcremoval;
-    Algorithm* energy;
+    Algorithm* movingAverage;
 
-    Real energyValue;
+    Algorithm* Energy;
+    Algorithm* Loudness;
+    Algorithm* ReplayGain;
+    Algorithm* InstantPower;
+    Algorithm* RMS;
+    Algorithm* Intensity;
+
+    Result result;
+    //Real energyValue;
     int frameSize;
 };
 
@@ -104,9 +112,30 @@ void* NewAnalyzer(int frameSize) {
     anl->dcremoval->input("signal").set(anl->audioBuffer);
     anl->dcremoval->output("signal").set(anl->audioBuffer_dc);
 
-    anl->energy = factory.create("Energy");
-    anl->energy->input("array").set(anl->audioBuffer_dc);
-    anl->energy->output("energy").set(anl->energyValue);
+    anl->Energy = factory.create("Energy");
+    anl->Energy->input("array").set(anl->audioBuffer_dc);
+    anl->Energy->output("energy").set(anl->result.Energy);
+
+    anl->ReplayGain = factory.create("ReplayGain", "sampleRate", sampleRate);
+    anl->ReplayGain->input("signal").set(anl->audioBuffer_dc);
+    anl->ReplayGain->output("replayGain").set(anl->result.ReplayGain);
+
+    anl->Intensity = factory.create("Intensity", "sampleRate", sampleRate);
+    anl->Intensity->input("signal").set(anl->audioBuffer_dc);
+    anl->Intensity->output("intensity").set(anl->result.Intensity);
+
+    anl->InstantPower = factory.create("InstantPower");
+    anl->InstantPower->input("array").set(anl->audioBuffer_dc);
+    anl->InstantPower->output("power").set(anl->result.InstantPower);
+
+    anl->RMS = factory.create("RMS");
+    anl->RMS->input("array").set(anl->audioBuffer_dc);
+    anl->RMS->output("rms").set(anl->result.RMS);
+
+    anl->Loudness = factory.create("Loudness");
+    anl->Loudness->input("signal").set(anl->audioBuffer_dc);
+    anl->Loudness->output("loudness").set(anl->result.Loudness);
+
     return anl;
 }
 
@@ -148,9 +177,9 @@ ResultArr AnalyzeFile(void *ptr, const char *path) {
         //if (isSilent(anl->audioBuffer)) continue;
 
         anl->dcremoval->compute();
-        anl->energy->compute();
+        anl->Energy->compute();
 
-        arr[cnt] = anl->energyValue;
+        arr[cnt] = anl->result.Energy;
         cnt++;
     }
 
@@ -161,7 +190,7 @@ ResultArr AnalyzeFile(void *ptr, const char *path) {
     return result;
 }
 
-Real FrameEnergy(void *ptr, const float *gobuf) {
+Result AnalyzeFrame(void *ptr, const float *gobuf) {
     Analyzer* anl = (Analyzer*)ptr;
 
     for (int i=0; i< anl->frameSize; i++){
@@ -169,7 +198,13 @@ Real FrameEnergy(void *ptr, const float *gobuf) {
     }
 
     anl->dcremoval->compute();
-    anl->energy->compute();
 
-    return anl->energyValue;
+    anl->Energy->compute();
+    anl->Loudness->compute();
+    anl->ReplayGain->compute();
+    anl->InstantPower->compute();
+    anl->RMS->compute();
+//    anl->Intensity->compute();
+
+    return anl->result;
 }

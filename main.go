@@ -1,8 +1,10 @@
 package main
 
 import (
+	"flag"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -10,14 +12,70 @@ import (
 	"github.com/Loofort/badneighbor/essentia"
 	"github.com/Loofort/badneighbor/lame"
 	"github.com/gordonklaus/portaudio"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-const (
-	listen = iota
-	record
+var trace = flag.Bool("trace", false, "print additional info")
+var level = flag.Float64("level", 0.002, "level of sound energy to record")
+
+var (
+	Objectives  = map[float64]float64{0.5: 0.05, 0.9: 0.01, 0.99: 0.001}
+	MaxAge      = 10 * time.Second
+	soundEnergy = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "sound_energy",
+		Help:       "sound energy",
+		Objectives: Objectives,
+		MaxAge:     MaxAge,
+	})
+	soundLoudness = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "sound_loudness",
+		Help:       "sound loudness",
+		Objectives: Objectives,
+		MaxAge:     MaxAge,
+	})
+	soundReplayGain = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "sound_replay_gain",
+		Help:       "sound replay_gain",
+		Objectives: Objectives,
+		MaxAge:     MaxAge,
+	})
+	soundInstantPower = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "sound_instant_power",
+		Help:       "sound instant_power",
+		Objectives: Objectives,
+		MaxAge:     MaxAge,
+	})
+	soundRMS = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "sound_rms",
+		Help:       "sound rms",
+		Objectives: Objectives,
+		MaxAge:     MaxAge,
+	})
+	soundIntensity = prometheus.NewSummary(prometheus.SummaryOpts{
+		Name:       "sound_intensity",
+		Help:       "sound intensity",
+		Objectives: Objectives,
+		MaxAge:     MaxAge,
+	})
 )
+
+func init() {
+	prometheus.MustRegister(soundEnergy)
+	prometheus.MustRegister(soundLoudness)
+	prometheus.MustRegister(soundReplayGain)
+	prometheus.MustRegister(soundInstantPower)
+	prometheus.MustRegister(soundRMS)
+	prometheus.MustRegister(soundIntensity)
+}
 
 func main() {
+	flag.Parse()
+
+	http.Handle("/metrics", promhttp.Handler())
+	go http.ListenAndServe(":8080", nil)
+
 	log.Print(run())
 }
 
@@ -43,16 +101,31 @@ func run() error {
 
 	rec := &SM{
 		process:    stateNone,
-		threshold:  0.1,
+		threshold:  float32(*level),
 		samplerate: int(dev.DefaultSampleRate),
 	}
 
 	for frames := range framesc {
-		energy := anl.FrameEnergy(frames[0])
-		rec.input(frames[0], energy)
+		stats := anl.AnalyzeFrame(frames[0])
+
+		soundEnergy.Observe(float64(stats.Energy))
+		soundLoudness.Observe(float64(stats.Loudness))
+		soundReplayGain.Observe(float64(stats.ReplayGain))
+		soundInstantPower.Observe(float64(stats.InstantPower))
+		soundRMS.Observe(float64(stats.RMS))
+		soundIntensity.Observe(float64(stats.Intensity))
+
+		logtrace(" %v", stats.Energy)
+		rec.input(frames[0], stats.Energy)
 	}
 
 	return nil
+}
+
+func logtrace(patern string, args ...interface{}) {
+	if *trace {
+		log.Printf(patern, args...)
+	}
 }
 
 /*************************** State Machine *********************************/
@@ -79,12 +152,16 @@ func (sm *SM) input(frame Frame, energy float32) {
 
 	switch state {
 	case none:
+		logtrace("state none")
 		sm.process = stateNone
 	case increase:
+		logtrace("state inc")
 		sm.process = stateIncrease
 	case active:
+		logtrace("state write")
 		sm.process = stateActive
 	case decrease:
+		logtrace("state dec")
 		sm.process = stateDecrease
 
 	}

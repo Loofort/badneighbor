@@ -8,6 +8,12 @@
   revision = "4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9"
 
 [[projects]]
+  name = "github.com/davecgh/go-spew"
+  packages = ["spew"]
+  revision = "346938d642f2ec3594ed81d874461961cd0faa76"
+  version = "v1.1.0"
+
+[[projects]]
   name = "github.com/golang/protobuf"
   packages = ["proto"]
   revision = "925541529c1fa6821df4e44ce2723319eb2be768"
@@ -20,30 +26,23 @@
   revision = "e66c30a9c4ca11f93538cf8c004831bfb76f3838"
 
 [[projects]]
-  branch = "master"
-  name = "github.com/hajimehoshi/go-mp3"
-  packages = [
-    ".",
-    "internal/bits",
-    "internal/consts",
-    "internal/frame",
-    "internal/frameheader",
-    "internal/huffman",
-    "internal/imdct",
-    "internal/maindata",
-    "internal/sideinfo"
-  ]
-  revision = "3c185f92b8dbceefa913b64cae634ba47f452769"
-
-[[projects]]
   name = "github.com/matttproud/golang_protobuf_extensions"
   packages = ["pbutil"]
   revision = "3247c84500bff8d9fb6d579d800f20b3e091582c"
   version = "v1.0.0"
 
 [[projects]]
+  name = "github.com/pmezard/go-difflib"
+  packages = ["difflib"]
+  revision = "792786c7400a136282c1664665ae0a8db921c6c2"
+  version = "v1.0.0"
+
+[[projects]]
   name = "github.com/prometheus/client_golang"
-  packages = ["prometheus"]
+  packages = [
+    "prometheus",
+    "prometheus/promhttp"
+  ]
   revision = "c5b7fccd204277076155f10851dad72b76a49317"
   version = "v0.8.0"
 
@@ -74,9 +73,18 @@
   ]
   revision = "282c8707aa210456a825798969cc27edda34992a"
 
+[[projects]]
+  name = "github.com/stretchr/testify"
+  packages = [
+    "assert",
+    "require"
+  ]
+  revision = "12b6f73e6084dad08a7c6e575284b177ecafbc71"
+  version = "v1.2.1"
+
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "cd5514d57cc981fc8bd6f198acbc19730be4c452bf4f283dc4421a3aeb2589c8"
+  inputs-digest = "22ca2d13f083f866df6bc5fcea7b18687aa96c9f8689af7f338804265e52715c"
   solver-name = "gps-cdcl"
   solver-version = 1
